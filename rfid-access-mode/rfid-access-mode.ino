@@ -1,5 +1,5 @@
 /*
-ACCESS MODE CODE
+ACCESS MODE CODE - WITH POWER OUTAGE RESILIENCE
 
 Connections:
 RFID:
@@ -17,6 +17,12 @@ GND - GND(BB)
 S - 27
 NO - - (SOLENOID)
 COM - + (SOLENOID)
+
+LCD CONNECTION:
+VCC - 5V (BB)
+GND - (BB)
+SDA - 21 (ESP)
+SCL - 17 (ESP)
 */
 
 #include <WiFi.h>
@@ -26,36 +32,45 @@ COM - + (SOLENOID)
 #include <MFRC522.h>
 #include <hd44780.h>
 #include <hd44780ioClass/hd44780_I2Cexp.h>
+#include <Preferences.h>
 
 #define RST_PIN 22
 #define SS_PIN 5
 #define RELAY_PIN 27
 
-String room_status = "Lock";
-String activeUser = "";  // Track the active user
+String room_status;
+String activeUser;
+bool relayState;
 
-const char* ssid = "Fake Wi";                      // WiFi SSID
-const char* password = "Aa1231325213!";            // WiFi Password
-const char* accessUrl = "http://192.168.68.235:3000/rfids";  // API endpoint
+const char* ssid = "Fake Wi";
+const char* password = "Aa1231325213!";
+const char* accessUrl = "http://192.168.68.235:3000/rfids";
 
 MFRC522 rfid(SS_PIN, RST_PIN);
 hd44780_I2Cexp lcd;
 HTTPClient accesshttp;
+Preferences preferences;
 
 void setup() {
   Serial.begin(115200);
   SPI.begin();
   rfid.PCD_Init();
+  
+  // Initialize preferences
+  preferences.begin("access-system", false); // false = read/write mode
+  
+  // Load saved state
+  loadSystemState();
 
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, LOW);  // Ensure the relay starts in a locked state
+  digitalWrite(RELAY_PIN, relayState);  // Restore relay state
 
-  Wire.begin(21, 17);  // SDA = GPIO 21, SCL = GPIO 17
-  lcd.begin(16, 2);    // 16 columns, 2 rows
+  Wire.begin(21, 17);
+  lcd.begin(16, 2);
   lcd.clear();
   lcd.print("TUP System");
   lcd.setCursor(0, 1);
-  lcd.print("Initializing...");
+  lcd.print(relayState ? "Unlocked" : "Locked");
   delay(2000);
   lcd.clear();
 
@@ -68,43 +83,69 @@ void setup() {
 }
 
 void loop() {
-  if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial())
+  static int failedReads = 0;
+
+  if (!rfid.PICC_IsNewCardPresent()) {
+    failedReads++;
+    Serial.println("No new card detected.");
+  } else if (!rfid.PICC_ReadCardSerial()) {
+    failedReads++;
+    Serial.println("Failed to read card serial.");
+  } else {
+    failedReads = 0;
+
+    String uid = "";
+    for (byte i = 0; i < rfid.uid.size; i++) {
+      uid += String(rfid.uid.uidByte[i], HEX);
+    }
+    uid.toUpperCase();
+    Serial.println("Card UID: " + uid);
+
+    lcd.clear();
+    lcd.print("ACCESS MODE");
+    accessMode(uid);
     return;
-
-  // Read UID from the scanned card
-  String uid = "";
-  for (byte i = 0; i < rfid.uid.size; i++) {
-    uid += String(rfid.uid.uidByte[i], HEX);
   }
-  uid.toUpperCase();
-  Serial.println("Card UID: " + uid);
 
-  lcd.clear();
-  lcd.print("ACCESS MODE");
-  accessMode(uid);  // Check access mode
+  if (failedReads > 3) {
+    Serial.println("RFID reinitializing after repeated failures...");
+    rfid.PCD_Init();
+    failedReads = 0;
+  }
+
+  delay(500);
 }
 
 void wifiConnect(String wifiName, String wifiPassword) {
-  WiFi.begin(wifiName, wifiPassword);
-  lcd.print("Connecting to");
-  lcd.setCursor(0, 1);
-  lcd.print("Wi-Fi...");
+  WiFi.begin(wifiName.c_str(), wifiPassword.c_str());
+  lcd.clear();
+  lcd.print("Connecting to Wi-Fi");
   Serial.print("Connecting to Wi-Fi");
 
-  while (WiFi.status() != WL_CONNECTED) {
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
     delay(500);
     Serial.print(".");
+    attempts++;
   }
 
-  lcd.clear();
-  lcd.print("Wi-Fi Connected");
-  Serial.println("\nConnected to Wi-Fi!");
+  if (WiFi.status() == WL_CONNECTED) {
+    lcd.clear();
+    lcd.print("Wi-Fi Connected");
+    Serial.println("\nConnected to Wi-Fi!");
+  } else {
+    lcd.clear();
+    lcd.print("Wi-Fi Failed!");
+    Serial.println("\nWi-Fi connection failed!");
+  }
   delay(2000);
 }
 
 int room_id = 1;
 
 void accessMode(String cardUid) {
+  HTTPClient http;
+
   lcd.clear();
   lcd.print("Getting Card");
   lcd.setCursor(0, 1);
@@ -114,7 +155,7 @@ void accessMode(String cardUid) {
   if (WiFi.status() == WL_CONNECTED) {
     accesshttp.begin(accessUrl);
     accesshttp.addHeader("Content-Type", "application/json");
-    accesshttp.addHeader("Authorization", "Bearer 6dbe948bb56f1d6827fbbd8321c7ad14");  // Use Bearer format
+    accesshttp.addHeader("Authorization", "Bearer 6dbe948bb56f1d6827fbbd8321c7ad14");
 
     String payload = String("{\"uid\":\"") + cardUid + 
                      String("\",\"room_number\":\"") + room_id + 
@@ -126,9 +167,6 @@ void accessMode(String cardUid) {
     Serial.println("HTTP Response Code: " + String(httpResponseCode));
 
     if (httpResponseCode == 401) {
-      // Unauthorized: Card not registered
-      Serial.println("Unauthorized access! Card not registered.");
-      
       lcd.clear();
       lcd.print("Not Registered!");
       lcd.setCursor(0, 1);
@@ -136,9 +174,6 @@ void accessMode(String cardUid) {
       delay(2000);
 
     } else if (httpResponseCode == 403) {
-      // Forbidden: Card inactive
-      Serial.println("Access denied! Card is inactive.");
-      
       lcd.clear();
       lcd.print("Card Inactive!");
       lcd.setCursor(0, 1);
@@ -146,14 +181,14 @@ void accessMode(String cardUid) {
       delay(2000);
 
     } else if (httpResponseCode == 200) {
-      // Success: Card is valid and active
       String response = accesshttp.getString();
       Serial.println("Server Response: " + response);
 
-      if (response.indexOf("\"unlock\":true") != -1 && digitalRead(RELAY_PIN) == LOW) {
-        // Unlock the door
+      if (response.indexOf("\"unlock\":true") != -1 && !relayState) {
         room_status = "Unlock";
-        activeUser = cardUid;  
+        activeUser = cardUid;
+        relayState = true;
+        saveSystemState();
         digitalWrite(RELAY_PIN, HIGH);
 
         lcd.clear();
@@ -163,59 +198,63 @@ void accessMode(String cardUid) {
         lcd.print("Welcome!");
         lcd.setCursor(0, 1);
         lcd.print(activeUser);
-        Serial.println("Access granted! Unlocking solenoid...");
         delay(2000);
         lcd.clear();
         lcd.print("Room " + String(room_id));
         lcd.setCursor(0, 1);
         lcd.print("Unlocked!");
 
-      } else if (response.indexOf("\"lock\":true") != -1 && digitalRead(RELAY_PIN) == HIGH) {
-        // Lock the door
+      } else if (response.indexOf("\"lock\":true") != -1 && relayState) {
         if (cardUid == activeUser) {
           room_status = "Lock";
           activeUser = "";
+          relayState = false;
+          saveSystemState();
           digitalWrite(RELAY_PIN, LOW);
 
           lcd.clear();
           lcd.print("Goodbye!");
           lcd.setCursor(0, 1);
           lcd.print(cardUid);
-          Serial.println("Access granted! Locking solenoid...");
           delay(2000);
           lcd.clear();
           lcd.print("Room " + String(room_id));
           lcd.setCursor(0, 1);
           lcd.print("Locked!");
         } else {
-          Serial.println("Access denied! Only active user can time out.");
           lcd.clear();
           lcd.print("Access Denied!");
           lcd.setCursor(0, 1);
           lcd.print("Room occupied");
           delay(2000);
         }
-      } else {
-        Serial.println("Access denied! Invalid response.");
-        lcd.clear();
-        lcd.print("Access Denied!");
-        lcd.setCursor(0, 1);
-        lcd.print("Invalid Response");
       }
-
-    } else {
-      // Error with POST request
-      Serial.println("Error sending POST request");
-      lcd.clear();
-      lcd.print("POST Failed!");
-      lcd.setCursor(0, 1);
-      lcd.print("Try Again");
-      delay(2000);
     }
-
     accesshttp.end();
   }
 
   rfid.PICC_HaltA();
   delay(2000);
+}
+
+void loadSystemState() {
+  room_status = preferences.getString("room_status", "Lock");
+  activeUser = preferences.getString("active_user", "");
+  relayState = preferences.getBool("relay_state", false);
+  
+  Serial.println("Loaded system state:");
+  Serial.println("Room Status: " + room_status);
+  Serial.println("Active User: " + activeUser);
+  Serial.println("Relay State: " + String(relayState ? "HIGH" : "LOW"));
+}
+
+void saveSystemState() {
+  preferences.putString("room_status", room_status);
+  preferences.putString("active_user", activeUser);
+  preferences.putBool("relay_state", relayState);
+  
+  Serial.println("Saved system state:");
+  Serial.println("Room Status: " + room_status);
+  Serial.println("Active User: " + activeUser);
+  Serial.println("Relay State: " + String(relayState ? "HIGH" : "LOW"));
 }
