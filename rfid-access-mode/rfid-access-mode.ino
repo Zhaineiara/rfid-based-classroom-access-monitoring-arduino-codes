@@ -96,9 +96,18 @@ void loop() {
 
     String uid = "";
     for (byte i = 0; i < rfid.uid.size; i++) {
+      if (rfid.uid.uidByte[i] < 0x10) {
+        uid += "0";
+      }
       uid += String(rfid.uid.uidByte[i], HEX);
     }
     uid.toUpperCase();
+
+    // Pad the UID to 12 digits if needed
+    while(uid.length() < 12) {
+      uid = "0" + uid;
+    }
+
     Serial.println("Card UID: " + uid);
 
     lcd.clear();
@@ -151,6 +160,14 @@ void accessMode(String cardUid) {
   lcd.setCursor(0, 1);
   lcd.print("Information...");
   delay(1000);
+
+  String formattedUid = cardUid;
+  while(formattedUid.length() < 12) {
+    formattedUid = "0" + formattedUid;
+  }
+  formattedUid.toUpperCase();
+
+  Serial.println("Card UID: " + formattedUid);
 
   if (WiFi.status() == WL_CONNECTED) {
     accesshttp.begin(accessUrl);
