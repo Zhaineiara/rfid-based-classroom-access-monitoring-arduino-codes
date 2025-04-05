@@ -34,6 +34,18 @@ SCL - 17 (ESP)
 #include <hd44780ioClass/hd44780_I2Cexp.h>
 #include <Preferences.h>
 
+/*Start of changeable variables*/
+/*Make sure it is on the same network, change the 4th octet only*/
+IPAddress local_IP(192, 168, 68, 101);
+int room_id = 2;
+/*End of changeable variables*/
+
+IPAddress gateway(192, 168, 68, 1);
+IPAddress subnet(255, 255, 255, 0);
+const char* ssid = "Fake Wi";
+const char* password = "Aa1231325213!";
+const char* accessUrl = "http://192.168.68.235:3000/rfids";
+
 #define RST_PIN 22
 #define SS_PIN 5
 #define RELAY_PIN 27
@@ -41,10 +53,6 @@ SCL - 17 (ESP)
 String room_status;
 String activeUser;
 bool relayState;
-
-const char* ssid = "Fake Wi";
-const char* password = "Aa1231325213!";
-const char* accessUrl = "http://192.168.68.235:3000/rfids";
 
 MFRC522 rfid(SS_PIN, RST_PIN);
 hd44780_I2Cexp lcd;
@@ -149,8 +157,6 @@ void wifiConnect(String wifiName, String wifiPassword) {
   }
   delay(2000);
 }
-
-int room_id = 1;
 
 void accessMode(String cardUid) {
   HTTPClient http;
@@ -258,11 +264,16 @@ void loadSystemState() {
   room_status = preferences.getString("room_status", "Lock");
   activeUser = preferences.getString("active_user", "");
   relayState = preferences.getBool("relay_state", false);
-  
-  Serial.println("Loaded system state:");
-  Serial.println("Room Status: " + room_status);
-  Serial.println("Active User: " + activeUser);
-  Serial.println("Relay State: " + String(relayState ? "HIGH" : "LOW"));
+
+  // ✅ Safety check
+  if (relayState && activeUser == "") {
+    // Relay says "open" but no active user? Force reset to locked.
+    Serial.println("Invalid state detected — forcing Lock.");
+    relayState = false;
+    room_status = "Lock";
+    preferences.putBool("relay_state", relayState);
+    preferences.putString("room_status", room_status);
+  }
 }
 
 void saveSystemState() {
