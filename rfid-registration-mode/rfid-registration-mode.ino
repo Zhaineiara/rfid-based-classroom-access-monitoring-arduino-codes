@@ -1,5 +1,5 @@
 /*
-REGISTRATION MODE
+REGISTRATION MODE WITH 12 DIGITS CARD REFERENCES NUMBER
 
 Connections:
 RFID:
@@ -24,9 +24,9 @@ RST - 22
 #define SS_PIN 5
 
 // Wi-Fi and Server Settings
-const char* ssid = "Zhaine";
-const char* password = "mapa12345";
-const char* registerUrl = "http://192.168.68.235:3000/card_scan";  // Change to "https://" if using SSL
+const char* ssid = "HUAWEI-E6Ze";
+const char* password = "starbucks.chocochip";
+const char* registerUrl = "http://192.168.100.129:3000/card_scan";  // Change to "https://" if using SSL
 const char* authToken = "6dbe948bb56f1d6827fbbd8321c7ad14";
 
 // Hardware instances

@@ -1,5 +1,5 @@
 /*
-ACCESS MODE CODE - WITH POWER OUTAGE RESILIENCE
+ACCESS MODE CODE - WITH POWER OUTAGE RESILIENCE AND 12 DIGITS CARD REFERENCES NUMBER
 
 Connections:
 RFID:
@@ -36,15 +36,15 @@ SCL - 17 (ESP)
 
 /*Start of changeable variables*/
 /*Make sure it is on the same network, change the 4th octet only*/
-IPAddress local_IP(192, 168, 68, 101);
+IPAddress local_IP(192, 168, 100, 101);
 int room_id = 2;
 /*End of changeable variables*/
 
-IPAddress gateway(192, 168, 68, 1);
+IPAddress gateway(192, 168, 100, 100);
 IPAddress subnet(255, 255, 255, 0);
-const char* ssid = "Fake Wi";
-const char* password = "Aa1231325213!";
-const char* accessUrl = "http://192.168.68.235:3000/rfids";
+const char* ssid = "HUAWEI-E6Ze";
+const char* password = "starbucks.chocochip";
+const char* accessUrl = "http://192.168.100.129:3000/rfids";
 
 #define RST_PIN 22
 #define SS_PIN 5
