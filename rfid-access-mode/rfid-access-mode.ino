@@ -282,7 +282,16 @@ void accessMode(String cardUid) {
         lcd.print("Unlocked!");
 
         // *** NEW: Auto-lock after 10 seconds ***
-        delay(10000);  // Wait 10 seconds
+        // *** NEW: Auto-lock after 10 seconds with a countdown display ***
+        for (int i = 10; i > 0; i--) {
+          lcd.clear();
+          delay(50);
+          lcd.print("Auto-lock in:");
+          lcd.setCursor(0, 1);
+          lcd.print(i);  // Shows the countdown number
+          delay(1000);   // Wait 1 second
+        }
+        
         relayState = false;
         digitalWrite(RELAY_PIN, LOW);  // Disengage relay (lock room)
         lcd.clear();
