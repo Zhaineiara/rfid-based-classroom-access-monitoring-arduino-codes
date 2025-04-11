@@ -93,16 +93,19 @@ void setup() {
   Wire.begin(21, 17);
   lcd.begin(16, 2);
   lcd.clear();
+  delay(50);
   lcd.print("TUP System");
   lcd.setCursor(0, 1);
   lcd.print(relayState ? "Unlocked" : "Locked");
   Serial.print(relayState ? "Unlocked" : "Locked");
   delay(2000);
   lcd.clear();
+  delay(50);
 
   wifiConnect(ssid, password);
 
   lcd.clear();
+  delay(50);
   lcd.print("Please scan");
   lcd.setCursor(0, 1);
   lcd.print("your RFID Card!");
@@ -118,12 +121,14 @@ void loop() {
     if (digitalRead(RELAY_PIN) == HIGH) {
       digitalWrite(RELAY_PIN, LOW);
       lcd.clear();
+      delay(50);
       lcd.print("Room " + String(room_id));
       lcd.setCursor(0, 1);
       lcd.print("Locked!");
     } else {
       digitalWrite(RELAY_PIN, HIGH);
       lcd.clear();
+      delay(50);
       lcd.print("Room " + String(room_id));
       lcd.setCursor(0, 1);
       lcd.print("Unlocked!");
@@ -158,6 +163,7 @@ void loop() {
     Serial.println("Card UID: " + uid);
 
     lcd.clear();
+    delay(50);
     lcd.print("ACCESS MODE");
     accessMode(uid);
     return;
@@ -175,8 +181,9 @@ void loop() {
 void wifiConnect(String wifiName, String wifiPassword) {
   WiFi.begin(wifiName.c_str(), wifiPassword.c_str());
   lcd.clear();
-  lcd.print("Connecting to Wi-Fi");
-  Serial.print("Connecting to Wi-Fi");
+  delay(50);
+  lcd.print("Wi-Fi Connecting....");
+  Serial.print("Connecting Wi-Fi");
 
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
@@ -187,10 +194,12 @@ void wifiConnect(String wifiName, String wifiPassword) {
 
   if (WiFi.status() == WL_CONNECTED) {
     lcd.clear();
+    delay(50);
     lcd.print("Wi-Fi Connected");
     Serial.println("\nConnected to Wi-Fi!");
   } else {
     lcd.clear();
+    delay(50);
     lcd.print("Wi-Fi Failed!");
     Serial.println("\nWi-Fi connection failed!");
   }
@@ -201,6 +210,7 @@ void accessMode(String cardUid) {
   HTTPClient http;
 
   lcd.clear();
+  delay(50);
   lcd.print("Getting Card");
   lcd.setCursor(0, 1);
   lcd.print("Information...");
@@ -230,6 +240,7 @@ void accessMode(String cardUid) {
 
     if (httpResponseCode == 401) {
       lcd.clear();
+      delay(50);
       lcd.print("Not Registered!");
       lcd.setCursor(0, 1);
       lcd.print("Access Denied");
@@ -237,6 +248,7 @@ void accessMode(String cardUid) {
 
     } else if (httpResponseCode == 403) {
       lcd.clear();
+      delay(50);
       lcd.print("Card Inactive!");
       lcd.setCursor(0, 1);
       lcd.print("Access Denied");
@@ -254,14 +266,17 @@ void accessMode(String cardUid) {
         digitalWrite(RELAY_PIN, HIGH);
 
         lcd.clear();
+        delay(50);
         lcd.print("Access Granted!");
         delay(1000);
         lcd.clear();
+        delay(50);
         lcd.print("Welcome!");
         lcd.setCursor(0, 1);
         lcd.print(activeUser);
         delay(2000);
         lcd.clear();
+        delay(50);
         lcd.print("Room " + String(room_id));
         lcd.setCursor(0, 1);
         lcd.print("Unlocked!");
@@ -271,6 +286,7 @@ void accessMode(String cardUid) {
         relayState = false;
         digitalWrite(RELAY_PIN, LOW);  // Disengage relay (lock room)
         lcd.clear();
+        delay(50);
         lcd.print("Room " + String(room_id));
         lcd.setCursor(0, 1);
         lcd.print("Locked!");
@@ -285,16 +301,19 @@ void accessMode(String cardUid) {
           digitalWrite(RELAY_PIN, LOW);
 
           lcd.clear();
+          delay(50);
           lcd.print("Goodbye!");
           lcd.setCursor(0, 1);
           lcd.print(cardUid);
           delay(2000);
           lcd.clear();
+          delay(50);
           lcd.print("Room " + String(room_id));
           lcd.setCursor(0, 1);
           lcd.print("Locked!");
         } else {
           lcd.clear();
+          delay(50);
           lcd.print("Access Denied!");
           lcd.setCursor(0, 1);
           lcd.print("Room occupied");
