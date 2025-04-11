@@ -30,6 +30,13 @@ room status is unlock = high relay, open solenoid
 
 when deenergized == it open the circuit. off solenoid.
 room status is lock = low relay, off solenoid
+
+on relay = nakalabas solenoid
+off relay = nakapasok solenoid
+
+Additional feature:
+  When there's a power outage, the system stores its previous state 
+  (relay state, room status, and active user) in non-volatile storage.
 */
 
 #include <WiFi.h>
@@ -104,11 +111,25 @@ void setup() {
 
   wifiConnect(ssid, password);
 
-  lcd.clear();
-  delay(50);
-  lcd.print("Please scan");
-  lcd.setCursor(0, 1);
-  lcd.print("your RFID Card!");
+  // Check if the system was left unlocked with an active user (recoverable state)
+  if (relayState && activeUser != "") {
+    Serial.println("🔁 Recovery mode: auto-finalizing session for UID " + activeUser);
+    lcd.clear();
+    delay(50);
+    lcd.print("Recovering...");
+    lcd.setCursor(0, 1);
+    lcd.print("Please wait...");
+    delay(1000);
+
+    // Send the saved user to server to finalize (Unlock → Lock)
+    accessMode(activeUser);  // reuse the same method
+  } else {
+    lcd.clear();
+    delay(50);
+    lcd.print("Please scan");
+    lcd.setCursor(0, 1);
+    lcd.print("your RFID Card!");
+  }
 }
 
 void loop() {
@@ -258,6 +279,16 @@ void accessMode(String cardUid) {
       String response = accesshttp.getString();
       Serial.println("Server Response: " + response);
 
+      if (response.indexOf("Recovered session") != -1) {
+        lcd.clear();
+        delay(50);
+        lcd.print("Session Fixed!");
+        lcd.setCursor(0, 1);
+        lcd.print("Now Locked");
+        delay(2000);
+      }
+
+
       if (response.indexOf("\"unlock\":true") != -1 && !relayState) {
         room_status = "Unlock";
         activeUser = cardUid;
@@ -291,14 +322,18 @@ void accessMode(String cardUid) {
           lcd.print(i);  // Shows the countdown number
           delay(1000);   // Wait 1 second
         }
-        
+
+        room_status = "Unlock";
+        activeUser = cardUid;
         relayState = false;
+        saveSystemState();
         digitalWrite(RELAY_PIN, LOW);  // Disengage relay (lock room)
         lcd.clear();
         delay(50);
         lcd.print("Room " + String(room_id));
         lcd.setCursor(0, 1);
         lcd.print("Locked!");
+
         delay(500);
 
       } else if (response.indexOf("\"lock\":true") != -1 && !relayState) {
