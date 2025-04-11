@@ -23,6 +23,13 @@ VCC - 5V (BB)
 GND - (BB)
 SDA - 21 (ESP)
 SCL - 17 (ESP)
+
+no pin of relay == open circuit
+when energized == it closes the circuit. on solenoid.
+room status is unlock = high relay, open solenoid
+
+when deenergized == it open the circuit. off solenoid.
+room status is lock = low relay, off solenoid
 */
 
 #include <WiFi.h>
@@ -40,11 +47,11 @@ IPAddress local_IP(192, 168, 100, 101);
 int room_id = 2;
 /*End of changeable variables*/
 
-IPAddress gateway(192, 168, 100, 100);
+IPAddress gateway(192, 168, 68, 1);
 IPAddress subnet(255, 255, 255, 0);
-const char* ssid = "HUAWEI-E6Ze";
-const char* password = "starbucks.chocochip";
-const char* accessUrl = "http://192.168.100.129:3000/rfids";
+const char* ssid = "Fake Wi";
+const char* password = "Aa1231325213!";
+const char* accessUrl = "http://192.168.68.235:3000/rfids";
 
 #define RST_PIN 22
 #define SS_PIN 5
@@ -59,6 +66,9 @@ hd44780_I2Cexp lcd;
 HTTPClient accesshttp;
 Preferences preferences;
 
+#define BUTTON_PIN 14      // Choose an available digital input pin
+bool lastButtonState = HIGH;
+
 void setup() {
   Serial.begin(115200);
   SPI.begin();
@@ -66,12 +76,19 @@ void setup() {
   
   // Initialize preferences
   preferences.begin("access-system", false); // false = read/write mode
-  
+
+  // Uncomment this is there's an issue about data stored in preference
+  //preferences.clear(); // ← This wipes all saved preferences
+  //preferences.end();
+
   // Load saved state
   loadSystemState();
 
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, relayState);  // Restore relay state
+
+  // Initialize button input with internal pullup 
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   Wire.begin(21, 17);
   lcd.begin(16, 2);
@@ -79,6 +96,7 @@ void setup() {
   lcd.print("TUP System");
   lcd.setCursor(0, 1);
   lcd.print(relayState ? "Unlocked" : "Locked");
+  Serial.print(relayState ? "Unlocked" : "Locked");
   delay(2000);
   lcd.clear();
 
@@ -92,6 +110,27 @@ void setup() {
 
 void loop() {
   static int failedReads = 0;
+
+  // Check manual override button using edge detection
+  bool currentButtonState = digitalRead(BUTTON_PIN);
+  if (currentButtonState == LOW && lastButtonState == HIGH) {  // Falling edge detected
+    // Toggle the relay output only
+    if (digitalRead(RELAY_PIN) == HIGH) {
+      digitalWrite(RELAY_PIN, LOW);
+      lcd.clear();
+      lcd.print("Room " + String(room_id));
+      lcd.setCursor(0, 1);
+      lcd.print("Locked!");
+    } else {
+      digitalWrite(RELAY_PIN, HIGH);
+      lcd.clear();
+      lcd.print("Room " + String(room_id));
+      lcd.setCursor(0, 1);
+      lcd.print("Unlocked!");
+    }
+    delay(1000);  // Debounce delay for the button press
+  }
+  lastButtonState = currentButtonState;
 
   if (!rfid.PICC_IsNewCardPresent()) {
     failedReads++;
@@ -180,9 +219,9 @@ void accessMode(String cardUid) {
     accesshttp.addHeader("Content-Type", "application/json");
     accesshttp.addHeader("Authorization", "Bearer 6dbe948bb56f1d6827fbbd8321c7ad14");
 
-    String payload = String("{\"uid\":\"") + cardUid + 
-                     String("\",\"room_number\":\"") + room_id + 
-                     String("\",\"room_status\":\"") + room_status + 
+    String payload = String("{\"uid\":\"") + cardUid +
+                     String("\",\"room_number\":\"") + room_id +
+                     String("\",\"room_status\":\"") + room_status +
                      String("\",\"api_token\":\"") + "6dbe948bb56f1d6827fbbd8321c7ad14" + String("\"}");
 
     int httpResponseCode = accesshttp.POST(payload);
@@ -227,7 +266,17 @@ void accessMode(String cardUid) {
         lcd.setCursor(0, 1);
         lcd.print("Unlocked!");
 
-      } else if (response.indexOf("\"lock\":true") != -1 && relayState) {
+        // *** NEW: Auto-lock after 10 seconds ***
+        delay(10000);  // Wait 10 seconds
+        relayState = false;
+        digitalWrite(RELAY_PIN, LOW);  // Disengage relay (lock room)
+        lcd.clear();
+        lcd.print("Room " + String(room_id));
+        lcd.setCursor(0, 1);
+        lcd.print("Locked!");
+        delay(500);
+
+      } else if (response.indexOf("\"lock\":true") != -1 && !relayState) {
         if (cardUid == activeUser) {
           room_status = "Lock";
           activeUser = "";
@@ -265,6 +314,15 @@ void loadSystemState() {
   activeUser = preferences.getString("active_user", "");
   relayState = preferences.getBool("relay_state", false);
 
+  // Safety: ensure only Lock/Unlock values are used
+  if (room_status != "Lock" && room_status != "Unlock") {
+    Serial.println("Corrupt room_status detected — resetting to Lock.");
+    room_status = "Lock";
+    relayState = false;
+    activeUser = "";
+    saveSystemState();
+  }
+
   // ✅ Safety check
   if (relayState && activeUser == "") {
     // Relay says "open" but no active user? Force reset to locked.
@@ -274,6 +332,11 @@ void loadSystemState() {
     preferences.putBool("relay_state", relayState);
     preferences.putString("room_status", room_status);
   }
+
+  Serial.println("✅ Loaded system state:");
+  Serial.println("Room Status: " + room_status);
+  Serial.println("Active User: " + activeUser);
+  Serial.println("Relay State: " + String(relayState ? "HIGH" : "LOW"));
 }
 
 void saveSystemState() {
