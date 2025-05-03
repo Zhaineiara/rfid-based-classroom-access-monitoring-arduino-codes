@@ -50,8 +50,8 @@ Additional feature:
 
 /*Start of changeable variables*/
 /*Make sure it is on the same network, change the 4th octet only*/
-IPAddress local_IP(192, 168, 100, 101);
-int room_id = 2;
+IPAddress local_IP(192, 168, 68, 101);
+int room_id = 1;
 /*End of changeable variables*/
 
 IPAddress gateway(192, 168, 68, 1);
@@ -75,6 +75,7 @@ Preferences preferences;
 
 #define BUTTON_PIN 14      // Choose an available digital input pin
 bool lastButtonState = HIGH;
+String roomText = "Room " + String(room_id);
 
 void setup() {
   Serial.begin(115200);
@@ -85,8 +86,8 @@ void setup() {
   preferences.begin("access-system", false); // false = read/write mode
 
   // Uncomment this is there's an issue about data stored in preference
-  //preferences.clear(); // ← This wipes all saved preferences
-  //preferences.end();
+  preferences.clear(); // ← This wipes all saved preferences
+  preferences.end();
 
   // Load saved state
   loadSystemState();
@@ -143,14 +144,14 @@ void loop() {
       digitalWrite(RELAY_PIN, LOW);
       lcd.clear();
       delay(50);
-      lcd.print("Room " + String(room_id));
+      lcd.print(roomText);
       lcd.setCursor(0, 1);
       lcd.print("Locked!");
     } else {
       digitalWrite(RELAY_PIN, HIGH);
       lcd.clear();
       delay(50);
-      lcd.print("Room " + String(room_id));
+      lcd.print(roomText);
       lcd.setCursor(0, 1);
       lcd.print("Unlocked!");
     }
@@ -279,6 +280,26 @@ void accessMode(String cardUid) {
       String response = accesshttp.getString();
       Serial.println("Server Response: " + response);
 
+      // — parse the user name —
+      const String userKey = "\"user\":\"";
+      int uPos = response.indexOf(userKey);
+      String ownerName = "";
+      if (uPos != -1) {
+        int uStart = uPos + userKey.length();
+        int uEnd   = response.indexOf("\"", uStart);
+        ownerName  = response.substring(uStart, uEnd);
+      }
+
+      // — parse the room_num field —
+      const String roomKey = "\"room_num\":\"";
+      int rPos = response.indexOf(roomKey);
+      String roomText = "";
+      if (rPos != -1) {
+        int rStart   = rPos + roomKey.length();
+        int rEnd     = response.indexOf("\"", rStart);
+        roomText     = response.substring(rStart, rEnd);
+      }
+
       if (response.indexOf("Recovered session") != -1) {
         lcd.clear();
         delay(50);
@@ -304,11 +325,11 @@ void accessMode(String cardUid) {
         delay(50);
         lcd.print("Welcome!");
         lcd.setCursor(0, 1);
-        lcd.print(activeUser);
+        lcd.print(ownerName);
         delay(2000);
         lcd.clear();
         delay(50);
-        lcd.print("Room " + String(room_id));
+        lcd.print(roomText);
         lcd.setCursor(0, 1);
         lcd.print("Unlocked!");
 
@@ -330,7 +351,7 @@ void accessMode(String cardUid) {
         digitalWrite(RELAY_PIN, LOW);  // Disengage relay (lock room)
         lcd.clear();
         delay(50);
-        lcd.print("Room " + String(room_id));
+        lcd.print(roomText);
         lcd.setCursor(0, 1);
         lcd.print("Locked!");
 
@@ -348,11 +369,11 @@ void accessMode(String cardUid) {
           delay(50);
           lcd.print("Goodbye!");
           lcd.setCursor(0, 1);
-          lcd.print(cardUid);
+          lcd.print(ownerName);
           delay(2000);
           lcd.clear();
           delay(50);
-          lcd.print("Room " + String(room_id));
+          lcd.print("Room ");
           lcd.setCursor(0, 1);
           lcd.print("Locked!");
         } else {
