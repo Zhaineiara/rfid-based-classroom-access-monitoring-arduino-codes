@@ -110,25 +110,11 @@ void setup() {
 
   wifiConnect(ssid, password);
 
-  // Check if the system was left unlocked with an active user (recoverable state)
-  if (relayState && activeUser != "") {
-    Serial.println("🔁 Recovery mode: auto-finalizing session for UID " + activeUser);
-    lcd.clear();
-    delay(50);
-    lcd.print("Recovering...");
-    lcd.setCursor(0, 1);
-    lcd.print("Please wait...");
-    delay(1000);
-
-    // Send the saved user to server to finalize (Unlock → Lock)
-    accessMode(activeUser);  // reuse the same method
-  } else {
-    lcd.clear();
-    delay(50);
-    lcd.print("Please scan");
-    lcd.setCursor(0, 1);
-    lcd.print("your RFID Card!");
-  }
+  lcd.clear();
+  delay(50);
+  lcd.print("Please scan");
+  lcd.setCursor(0, 1);
+  lcd.print("your RFID Card!");
 }
 
 void loop() {
@@ -270,6 +256,14 @@ void accessMode(String cardUid) {
       lcd.clear();
       delay(50);
       lcd.print("Not Registered!");
+      lcd.setCursor(0, 1);
+      lcd.print("Access Denied");
+      delay(2000);
+
+    } else if (httpResponseCode == 409) {
+      lcd.clear();
+      delay(50);
+      lcd.print("Inactive Card!");
       lcd.setCursor(0, 1);
       lcd.print("Access Denied");
       delay(2000);
