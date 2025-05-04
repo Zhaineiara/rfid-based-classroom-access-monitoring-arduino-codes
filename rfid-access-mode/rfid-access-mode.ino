@@ -63,19 +63,17 @@ const char* accessUrl = "http://192.168.68.235:3000/rfids";
 #define RST_PIN 22
 #define SS_PIN 5
 #define RELAY_PIN 27
+#define BUTTON_PIN 14
 
 String room_status;
 String activeUser;
 bool relayState;
+bool lastButtonState = HIGH;
 
 MFRC522 rfid(SS_PIN, RST_PIN);
 hd44780_I2Cexp lcd;
 HTTPClient accesshttp;
 Preferences preferences;
-
-#define BUTTON_PIN 14      // Choose an available digital input pin
-bool lastButtonState = HIGH;
-String roomText = "Room " + String(room_id);
 
 void setup() {
   Serial.begin(115200);
@@ -102,9 +100,9 @@ void setup() {
   lcd.begin(16, 2);
   lcd.clear();
   delay(50);
-  lcd.print("TUP System");
+  lcd.print("RFID ROOM SYSTEM");
   lcd.setCursor(0, 1);
-  lcd.print(relayState ? "Unlocked" : "Locked");
+  lcd.print("2024-2025");
   Serial.print(relayState ? "Unlocked" : "Locked");
   delay(2000);
   lcd.clear();
@@ -144,16 +142,16 @@ void loop() {
       digitalWrite(RELAY_PIN, LOW);
       lcd.clear();
       delay(50);
-      lcd.print(roomText);
+      lcd.print("Button Pressed");
       lcd.setCursor(0, 1);
-      lcd.print("Locked!");
+      lcd.print("Room Locked!");
     } else {
       digitalWrite(RELAY_PIN, HIGH);
       lcd.clear();
       delay(50);
-      lcd.print(roomText);
+      lcd.print("Button Pressed");
       lcd.setCursor(0, 1);
-      lcd.print("Unlocked!");
+      lcd.print("Room Unlocked!");
     }
     delay(1000);  // Debounce delay for the button press
   }
@@ -260,18 +258,18 @@ void accessMode(String cardUid) {
     Serial.println("Payload sent: " + payload);
     Serial.println("HTTP Response Code: " + String(httpResponseCode));
 
-    if (httpResponseCode == 401) {
+    if (httpResponseCode == 403) {
       lcd.clear();
       delay(50);
-      lcd.print("Not Registered!");
+      lcd.print("Room Occupied");
       lcd.setCursor(0, 1);
       lcd.print("Access Denied");
       delay(2000);
 
-    } else if (httpResponseCode == 403) {
+    } else if (httpResponseCode == 401) {
       lcd.clear();
       delay(50);
-      lcd.print("Card Inactive!");
+      lcd.print("Not Registered!");
       lcd.setCursor(0, 1);
       lcd.print("Access Denied");
       delay(2000);
@@ -323,7 +321,7 @@ void accessMode(String cardUid) {
         delay(1000);
         lcd.clear();
         delay(50);
-        lcd.print("Welcome!");
+        lcd.print("Welcome! Prof.");
         lcd.setCursor(0, 1);
         lcd.print(ownerName);
         delay(2000);
@@ -333,7 +331,6 @@ void accessMode(String cardUid) {
         lcd.setCursor(0, 1);
         lcd.print("Unlocked!");
 
-        // *** NEW: Auto-lock after 10 seconds ***
         // *** NEW: Auto-lock after 10 seconds with a countdown display ***
         for (int i = 10; i > 0; i--) {
           lcd.clear();
@@ -351,9 +348,9 @@ void accessMode(String cardUid) {
         digitalWrite(RELAY_PIN, LOW);  // Disengage relay (lock room)
         lcd.clear();
         delay(50);
-        lcd.print(roomText);
+        lcd.print(roomText + " Locked!");
         lcd.setCursor(0, 1);
-        lcd.print("Locked!");
+        lcd.print("Room Occupied");
 
         delay(500);
 
@@ -367,21 +364,21 @@ void accessMode(String cardUid) {
 
           lcd.clear();
           delay(50);
-          lcd.print("Goodbye!");
+          lcd.print("Goodbye! Prof.");
           lcd.setCursor(0, 1);
           lcd.print(ownerName);
           delay(2000);
           lcd.clear();
           delay(50);
-          lcd.print("Room ");
+          lcd.print(roomText + " Locked!");
           lcd.setCursor(0, 1);
-          lcd.print("Locked!");
+          lcd.print("Room Available");
         } else {
           lcd.clear();
           delay(50);
-          lcd.print("Access Denied!");
-          lcd.setCursor(0, 1);
           lcd.print("Room occupied");
+          lcd.setCursor(0, 1);
+          lcd.print("Access Denied!");
           delay(2000);
         }
       }
