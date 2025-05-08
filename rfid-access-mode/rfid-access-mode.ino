@@ -47,18 +47,20 @@ Additional feature:
 #include <hd44780.h>
 #include <hd44780ioClass/hd44780_I2Cexp.h>
 #include <Preferences.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 
 /*Start of changeable variables*/
 /*Make sure it is on the same network, change the 4th octet only*/
-IPAddress local_IP(192, 168, 68, 101);
+IPAddress local_IP(192, 168, 0, 101);
 int room_id = 1;
 /*End of changeable variables*/
 
-IPAddress gateway(192, 168, 68, 1);
+IPAddress gateway(192, 168, 0, 1);
 IPAddress subnet(255, 255, 255, 0);
-const char* ssid = "Fake Wi";
-const char* password = "Aa1231325213!";
-const char* accessUrl = "http://192.168.68.235:3000/rfids";
+const char* ssid = "RFID_system";
+const char* password = "rfidsystem";
+const char* accessUrl = "http://192.168.0.100:3000/rfids";
 
 #define RST_PIN 22
 #define SS_PIN 5
@@ -74,6 +76,7 @@ MFRC522 rfid(SS_PIN, RST_PIN);
 hd44780_I2Cexp lcd;
 HTTPClient accesshttp;
 Preferences preferences;
+AsyncWebServer server(80);
 
 void setup() {
   Serial.begin(115200);
@@ -109,6 +112,9 @@ void setup() {
   delay(50);
 
   wifiConnect(ssid, password);
+
+  // Setup web server endpoint for relay control
+  setupWebServer();
 
   lcd.clear();
   delay(50);
@@ -423,4 +429,33 @@ void saveSystemState() {
   Serial.println("Room Status: " + room_status);
   Serial.println("Active User: " + activeUser);
   Serial.println("Relay State: " + String(relayState ? "HIGH" : "LOW"));
+}
+
+void setupWebServer() {
+  server.on("/relay", HTTP_POST, [](AsyncWebServerRequest *request) {
+    if(!request->hasHeader("Authorization")) {
+      request->send(401);
+      return;
+    }
+
+    String auth = request->header("Authorization");
+    if(auth != "Bearer 6dbe948bb56f1d6827fbbd8321c7ad14") {
+      request->send(401);
+      return;
+    }
+
+    AsyncWebParameter* p = request->getParam("state", true);
+    if(p) {
+      bool newState = (p->value() == "true");
+      digitalWrite(RELAY_PIN, newState ? HIGH : LOW);
+      relayState = newState;
+      saveSystemState();
+      
+      request->send(200, "application/json", "{\"success\":true,\"state\":" + String(newState ? "true" : "false") + "}");
+    } else {
+      request->send(400);
+    }
+  });
+
+  server.begin();
 }
