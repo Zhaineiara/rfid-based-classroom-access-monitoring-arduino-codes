@@ -1,43 +1,53 @@
-/*
-ACCESS MODE CODE - WITH POWER OUTAGE RESILIENCE AND 12 DIGITS CARD REFERENCES NUMBER
+/*********************************************************************
+ESET DEPARTMENT RFID-BASED CLASSROOM ACCESS MONITORING
+ACCESS MODE CODE
+**********************************************************************/
 
-Connections:
-RFID:
-SDA -5
-SCK - 18
-MOSI - 23
-MISO - 19
-GND - GND(ESP)
-RST - 22
-3.3V - 3.3V(ESP)
+/*********************************************************************
+ * CONNECTION GUIDE
+ * ===============
+ * 
+ * RFID-RC522 Module:
+ * ------------------
+ * SDA  -> GPIO 5  (SS)
+ * SCK  -> GPIO 18 (SCK)
+ * MOSI -> GPIO 23 (MOSI)
+ * MISO -> GPIO 19 (MISO)
+ * GND  -> GND
+ * RST  -> GPIO 22
+ * 3.3V -> 3.3V
+ * 
+ * Relay Module:
+ * ------------
+ * 5V   -> 5V (Breadboard)
+ * GND  -> GND (Breadboard)
+ * S    -> GPIO 27
+ * NO   -> Magnetic Lock (-)
+ * COM  -> Magnetic Lock (+)
+ * 
+ * LCD I2C Display:
+ * --------------
+ * VCC  -> 5V (Breadboard)
+ * GND  -> GND (Breadboard)
+ * SDA  -> GPIO 21
+ * SCL  -> GPIO 17
+ * 
+ * Push Button:
+ * -----------
+ * Pin 1 -> GPIO 14
+ * Pin 2 -> GND
+ *********************************************************************/
 
-RELAY:
-5V - 5V(BB)
-GND - GND(BB)
-S - 27
-NO - - (SOLENOID)
-COM - + (SOLENOID)
-
-LCD CONNECTION:
-VCC - 5V (BB)
-GND - (BB)
-SDA - 21 (ESP)
-SCL - 17 (ESP)
-
-no pin of relay == open circuit
-when energized == it closes the circuit. on solenoid.
-room status is unlock = high relay, open solenoid
-
-when deenergized == it open the circuit. off solenoid.
-room status is lock = low relay, off solenoid
-
-on relay = nakalabas solenoid
-off relay = nakapasok solenoid
-
-Additional feature:
-  When there's a power outage, the system stores its previous state 
-  (relay state, room status, and active user) in non-volatile storage.
-*/
+/*********************************************************************
+ * LIBRARIES REQUIRED
+ * ==================
+ * - WiFi, HTTPClient, SPI, Wire
+ * - MFRC522
+ * - hd44780
+ * - Preferences
+ * - AsyncTCP
+ * - ESPAsyncWebServer
+ *********************************************************************/
 
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -47,20 +57,18 @@ Additional feature:
 #include <hd44780.h>
 #include <hd44780ioClass/hd44780_I2Cexp.h>
 #include <Preferences.h>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
 
 /*Start of changeable variables*/
 /*Make sure it is on the same network, change the 4th octet only*/
-IPAddress local_IP(192, 168, 0, 101);
+IPAddress local_IP(192, 168, 68, 101);
 int room_id = 1;
 /*End of changeable variables*/
 
-IPAddress gateway(192, 168, 0, 1);
+IPAddress gateway(192, 168, 68, 1);
 IPAddress subnet(255, 255, 255, 0);
-const char* ssid = "RFID_system";
-const char* password = "rfidsystem";
-const char* accessUrl = "http://192.168.0.100:3000/rfids";
+const char* ssid = "Fake Wi";
+const char* password = "Aa1231325213!";
+const char* accessUrl = "http://192.168.68.235:3000/rfids";
 
 #define RST_PIN 22
 #define SS_PIN 5
@@ -76,7 +84,6 @@ MFRC522 rfid(SS_PIN, RST_PIN);
 hd44780_I2Cexp lcd;
 HTTPClient accesshttp;
 Preferences preferences;
-AsyncWebServer server(80);
 
 void setup() {
   Serial.begin(115200);
@@ -112,9 +119,6 @@ void setup() {
   delay(50);
 
   wifiConnect(ssid, password);
-
-  // Setup web server endpoint for relay control
-  setupWebServer();
 
   lcd.clear();
   delay(50);
@@ -191,6 +195,7 @@ void loop() {
 }
 
 void wifiConnect(String wifiName, String wifiPassword) {
+  WiFi.config(local_IP, gateway, subnet);
   WiFi.begin(wifiName.c_str(), wifiPassword.c_str());
   lcd.clear();
   delay(50);
@@ -270,6 +275,14 @@ void accessMode(String cardUid) {
       lcd.clear();
       delay(50);
       lcd.print("Inactive Card!");
+      lcd.setCursor(0, 1);
+      lcd.print("Access Denied");
+      delay(2000);
+
+    } else if (httpResponseCode == 423) {
+      lcd.clear();
+      delay(50);
+      lcd.print("Inactive Room");
       lcd.setCursor(0, 1);
       lcd.print("Access Denied");
       delay(2000);
@@ -429,33 +442,4 @@ void saveSystemState() {
   Serial.println("Room Status: " + room_status);
   Serial.println("Active User: " + activeUser);
   Serial.println("Relay State: " + String(relayState ? "HIGH" : "LOW"));
-}
-
-void setupWebServer() {
-  server.on("/relay", HTTP_POST, [](AsyncWebServerRequest *request) {
-    if(!request->hasHeader("Authorization")) {
-      request->send(401);
-      return;
-    }
-
-    String auth = request->header("Authorization");
-    if(auth != "Bearer 6dbe948bb56f1d6827fbbd8321c7ad14") {
-      request->send(401);
-      return;
-    }
-
-    AsyncWebParameter* p = request->getParam("state", true);
-    if(p) {
-      bool newState = (p->value() == "true");
-      digitalWrite(RELAY_PIN, newState ? HIGH : LOW);
-      relayState = newState;
-      saveSystemState();
-      
-      request->send(200, "application/json", "{\"success\":true,\"state\":" + String(newState ? "true" : "false") + "}");
-    } else {
-      request->send(400);
-    }
-  });
-
-  server.begin();
 }
