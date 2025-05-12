@@ -6,7 +6,7 @@ ACCESS MODE CODE
 /*********************************************************************
  * CONNECTION GUIDE
  * ===============
- * 
+ *
  * RFID-RC522 Module:
  * ------------------
  * SDA  -> GPIO 5  (SS)
@@ -16,7 +16,7 @@ ACCESS MODE CODE
  * GND  -> GND
  * RST  -> GPIO 22
  * 3.3V -> 3.3V
- * 
+ *
  * Relay Module:
  * ------------
  * 5V   -> 5V (Breadboard)
@@ -24,14 +24,14 @@ ACCESS MODE CODE
  * S    -> GPIO 27
  * NO   -> Magnetic Lock (-)
  * COM  -> Magnetic Lock (+)
- * 
+ *
  * LCD I2C Display:
  * --------------
  * VCC  -> 5V (Breadboard)
  * GND  -> GND (Breadboard)
  * SDA  -> GPIO 21
  * SCL  -> GPIO 17
- * 
+ *
  * Push Button:
  * -----------
  * Pin 1 -> GPIO 14
@@ -85,11 +85,13 @@ hd44780_I2Cexp lcd;
 HTTPClient accesshttp;
 Preferences preferences;
 
+const String masterCard = "0000D42E15F9"; // Define masterCard globally
+
 void setup() {
   Serial.begin(115200);
   SPI.begin();
   rfid.PCD_Init();
-  
+
   // Initialize preferences
   preferences.begin("access-system", false); // false = read/write mode
 
@@ -103,7 +105,7 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, relayState);  // Restore relay state
 
-  // Initialize button input with internal pullup 
+  // Initialize button input with internal pullup
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   Wire.begin(21, 17);
@@ -233,6 +235,88 @@ void accessMode(String cardUid) {
   lcd.print("Information...");
   delay(1000);
 
+  if (cardUid == masterCard) {
+    if (digitalRead(RELAY_PIN) == LOW) {
+      lcd.clear();
+      lcd.print("Master Card");
+      lcd.setCursor(0, 1);
+      lcd.print("Activated!");
+      delay(2000);
+
+      lcd.clear();
+      delay(50);
+      lcd.print("Hidden Access");
+      lcd.setCursor(0, 1);
+      lcd.print("Time in!");
+      delay(2000);
+
+      lcd.clear();
+      lcd.print("Good Day Prof.");
+      lcd.setCursor(0, 1);
+      lcd.print("Joey Boy Mission");
+      delay(2000);
+
+      relayState = true;
+      room_status = "Unlock";
+      activeUser = masterCard;
+      saveSystemState();
+      digitalWrite(RELAY_PIN, HIGH);
+      delay(2000);
+
+      // Optional auto-lock countdown
+      for (int i = 10; i > 0; i--) {
+        lcd.clear();
+        delay(50);
+        lcd.print("Auto-lock in:");
+        lcd.setCursor(0, 1);
+        lcd.print(i);
+        delay(1000);
+      }
+
+      relayState = false;
+      room_status = "Lock";
+      activeUser = "";
+      saveSystemState();
+      digitalWrite(RELAY_PIN, LOW);
+
+      lcd.clear();
+      lcd.print("Room Locked");
+      lcd.setCursor(0, 1);
+      return;
+
+    } else {
+      lcd.clear();
+      lcd.print("Master Card");
+      lcd.setCursor(0, 1);
+      lcd.print("Activated!");
+      delay(2000);
+
+      lcd.clear();
+      delay(50);
+      lcd.print("Hidden Access");
+      lcd.setCursor(0, 1);
+      lcd.print("Time out!");
+      delay(2000);
+
+      lcd.clear();
+      lcd.print("Goodbye Prof.");
+      lcd.setCursor(0, 1);
+      lcd.print("Joey Boy Mission");
+      delay(2000);
+
+      relayState = false;
+      room_status = "Lock";
+      activeUser = "";
+      saveSystemState();
+      digitalWrite(RELAY_PIN, LOW);
+
+      lcd.clear();
+      lcd.print("Room Locked");
+      delay(2000);
+      return;
+    }
+  }
+
   String formattedUid = cardUid;
   while(formattedUid.length() < 12) {
     formattedUid = "0" + formattedUid;
@@ -319,7 +403,6 @@ void accessMode(String cardUid) {
         lcd.print("Now Locked");
         delay(2000);
       }
-
 
       if (response.indexOf("\"unlock\":true") != -1 && !relayState) {
         room_status = "Unlock";
@@ -437,7 +520,7 @@ void saveSystemState() {
   preferences.putString("room_status", room_status);
   preferences.putString("active_user", activeUser);
   preferences.putBool("relay_state", relayState);
-  
+
   Serial.println("Saved system state:");
   Serial.println("Room Status: " + room_status);
   Serial.println("Active User: " + activeUser);
